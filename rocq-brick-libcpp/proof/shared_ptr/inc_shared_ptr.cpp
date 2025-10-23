@@ -5,3 +5,10 @@ std::shared_ptr<int> testnew4() {
     *x=1;
     return x;
   }
+
+int * testnew() {
+  int *x;
+  x=new int;
+  *x=1;
+  return x;
+}
