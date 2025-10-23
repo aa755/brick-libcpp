@@ -5,10 +5,6 @@ Require Import bluerock.cpp.stdlib.vector.spec.
 Require Import bluerock.cpp.stdlib.atomic.spec.
 Require Import bluerock.cpp.stdlib.algorithms.spec.
 Require Import bluerock.cpp.stdlib.new.spec_exc.
-(*
-./../../../../brick-libcpp/rocq-brick-libcpp/proof/dune
-Require Import bluerock.cpp.stdlib.test.vector.test_cpp.
-*)
 Require Import bluerock.brick.libcpp.newarr.spec_exc.
 Require Import bluerock.brick.libcpp.newarr.hints.
 Require Import bluerock.brick.libcpp.shared_ptr.inc_shared_ptr_cpp.
@@ -90,7 +86,7 @@ Section specs.
        ** Lstar (List.repeat (copyConstrRight ctrlBlockId) (Pos.to_nat maxContention -1))
        ).
 
-
+  (** move constructor *)
   cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int>&&)" as shm with (fun (this:ptr) =>
     \arg{other:ptr} "other" (Vptr other)
     \pre{ctrlBlockId ownedPtr} other |-> SharedPtrR "int" ctrlBlockId ownedPtr
@@ -98,15 +94,24 @@ Section specs.
           ** this |-> SharedPtrR "int"  ctrlBlockId ownedPtr).
 
 
-  (** TODO: unify shd1 and shd2 using dependent types 
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd1 with (fun (this:ptr) =>
     \with (null:bool)
-    \pre{(p:ptr)} this |-> if null then NullSharedPtrR "int" else  SharedPtrR "int"  sg p
-    \post contenderToken sg).*)
+    \pre{(p:ptr) (sid: if null then unit else CtrlBlockId)}
+      this |-> (match null as b return (if b then unit else CtrlBlockId) -> Rep with
+                | false => fun sid=> SharedPtrR "int" sid p
+                | true => fun sid=> NullSharedPtrR "int"
+                end) sid
 
+    \post (match null as b return (if b then unit else CtrlBlockId) -> mpred with
+                | false => fun sid=> copyConstrRight sid
+                | true => fun sid=> emp
+                end) sid).
+
+  (*
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd2 with (fun (this:ptr) =>
     \pre this |-> NullSharedPtrR "int"
     \post emp).
+  *)
 
   (** Copy-ctor from non-null: consumes one contenderToken*)
   cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int> const&)" as shc1
@@ -164,13 +169,8 @@ Section specs.
        ** Lstar (repeat (copyConstrRight sid) (Pos.to_nat maxContention - 1)) 
     ).
 
-    (** proofs: *)
+  (** proofs: *)
   Opaque SharedPtrR.
-(*
-  Lemma observeState (state_addr:ptr) q t:
-    Observe (reference_to "monad::AccountState" state_addr)
-            (state_addr |-> UpdatedAccountStateR q t).
-  Proof using. Admitted. *)
   
   Definition observeSharedType r q t op:= @observe_fwd _ _ _ (sharedR_typeptr_observe r q t op).
 
@@ -202,12 +202,13 @@ Section specs.
     iExists _, _.
     eagerUnifyU.
     go.
-    iExists _,_.
-    go.
+    iExists true.
+    iExists nullptr.
+    iExists tt.
+    ego.
   Qed.
   
   Disable Notation "::wpOperand".
-  
   
   cpp.spec "testnew()" as testnewspec with (
     \pre emp
