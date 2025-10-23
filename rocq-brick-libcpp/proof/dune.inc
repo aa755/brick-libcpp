@@ -5,7 +5,7 @@
   (alias test_ast)
   (deps (:input inc.hpp) (glob_files_rec ../*.hpp) (universe))
   (action
-  	 (with-stderr-to inc_hpp.v.stderr (run cpp2v -v %{input} -o inc_hpp.v  -- -std=c++20 -stdlib=libc++ ))))
+  	 (with-stderr-to inc_hpp.v.stderr (run cpp2v -v %{input} -o inc_hpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps inc.hpp))
 )
 (subdir mutex
@@ -14,7 +14,7 @@
   (alias test_ast)
   (deps (:input test.cpp) (glob_files_rec ../*.hpp) (universe))
   (action
-  	 (with-stderr-to test_cpp.v.stderr (run cpp2v -v %{input} -o test_cpp.v  -- -std=c++20 -stdlib=libc++ ))))
+  	 (with-stderr-to test_cpp.v.stderr (run cpp2v -v %{input} -o test_cpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps test.cpp))
 )
 (subdir semaphore
@@ -23,7 +23,7 @@
   (alias test_ast)
   (deps (:input inc.hpp) (glob_files_rec ../*.hpp) (universe))
   (action
-  	 (with-stderr-to inc_hpp.v.stderr (run cpp2v -v %{input} -o inc_hpp.v  -- -std=c++20 -stdlib=libc++ ))))
+  	 (with-stderr-to inc_hpp.v.stderr (run cpp2v -v %{input} -o inc_hpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps inc.hpp))
 )
 (subdir semaphore
@@ -32,6 +32,15 @@
   (alias test_ast)
   (deps (:input test.cpp) (glob_files_rec ../*.hpp) (universe))
   (action
-  	 (with-stderr-to test_cpp.v.stderr (run cpp2v -v %{input} -o test_cpp.v  -- -std=c++20 -stdlib=libc++ ))))
+  	 (with-stderr-to test_cpp.v.stderr (run cpp2v -v %{input} -o test_cpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps test.cpp))
+)
+(subdir shared_ptr
+ (rule
+  (targets inc_shared_ptr_cpp.v.stderr inc_shared_ptr_cpp.v)
+  (alias test_ast)
+  (deps (:input inc_shared_ptr.cpp) (glob_files_rec ../*.hpp) (universe))
+  (action
+  	 (with-stderr-to inc_shared_ptr_cpp.v.stderr (run cpp2v -v %{input} -o inc_shared_ptr_cpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
+ (alias (name srcs) (deps inc_shared_ptr.cpp))
 )
