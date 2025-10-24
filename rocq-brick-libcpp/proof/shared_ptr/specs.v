@@ -7,6 +7,8 @@ Require Import bluerock.cpp.stdlib.algorithms.spec.
 Require Import bluerock.cpp.stdlib.new.spec_exc.
 Require Import bluerock.brick.libcpp.newarr.spec_exc.
 Require Import bluerock.brick.libcpp.newarr.hints.
+Require Import bluerock.cpp.spec.concepts.
+Require Import bluerock.cpp.spec.concepts.experimental.
 Require Import bluerock.brick.libcpp.shared_ptr.inc_shared_ptr_cpp.
 
 Definition liftQ {PROP: bi} (p: Qp->PROP) (q:Q) : PROP :=
@@ -92,7 +94,26 @@ Section specs.
   Definition Lstar (l: list mpred) : mpred := [∗ list] i ∈ l, i.
 
   Definition allButFirstContenderId := (seq 1 (Pos.to_nat maxContention -1 )).
-  cpp.spec "std::shared_ptr<int>::shared_ptr<int, void>(int*)" as shp with (fun (this:ptr) =>
+
+  Context `{!BundledRep cppty V}.
+  Notation sptr := ("std::shared_ptr".<<Atype cppty>>).
+  Definition init_ctor := specify.template.ctor sptr [Tptr cppty] $
+    \this this
+    \arg{p:ptr} "ownedPtr" (Vptr p)
+    \pre{p} dynAllocatedR "int" p
+    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
+      p |-> Rpiece ctid
+    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR cppty 1  |]
+    (*                                                        ^^ if anyR is not meaningful for non-scalar types, replace this with wp of default destructor *)    
+    \post Exists (ctrlBlockId: CtrlBlockId),
+       this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
+       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
+  .
+   
+  Definition SpecFor_init_ctor := RegisterSpec init_ctor.
+  #[global] Existing Instance SpecFor_init_ctor.
+  (*
+  cpp.spec "std::shared_ptr<int>::shared_ptr<int, void>(int* )" as shp with (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
     \pre{p} dynAllocatedR "int" p
     \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
@@ -102,6 +123,7 @@ Section specs.
        this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
        ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
        ).
+*)
 
   (** move constructor. the new object represents the same piece of ownership  *)
   cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int>&&)" as shm with (fun (this:ptr) =>
