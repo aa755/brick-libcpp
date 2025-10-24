@@ -69,6 +69,7 @@ Section specs.
       In reality, it is probably a struct. so move the atomicR to some defn ctrlBlockR *)
   Definition SharedPtrR (cppty: type) (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr)  : Rep :=
     structR ("std::shared_ptr".<<Atype cppty>>) 1
+    ** [| ([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1 |]
     ** ownedPtrOffset |-> primR "cppty" 1 (Vptr ownedPtr)
     ** ctrlBlockPtrOffset |-> primR "cppty" 1 (Vptr (dataLoc id))
     ** [| ownedPtr<>nullptr |] (* use NullSharedPtr othewise *)
@@ -90,13 +91,13 @@ Section specs.
 
   Definition Lstar (l: list mpred) : mpred := [∗ list] i ∈ l, i.
 
-  Definition allButFirstContenderId := (seq 1 (Pos.to_nat maxContention)).
+  Definition allButFirstContenderId := (seq 1 (Pos.to_nat maxContention -1 )).
   cpp.spec "std::shared_ptr<int>::shared_ptr<int, void>(int*)" as shp with (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
     \pre{p} dynAllocatedR "int" p
     \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
       p |-> Rpiece ctid
-
+    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1  |]
     \post Exists (ctrlBlockId: CtrlBlockId),
        this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
        ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
@@ -235,7 +236,33 @@ Proof using.
 Qed.
 
 Hint Resolve NoDup_seq : setsolver.
-Hint Rewrite elem_of_seq: iff.
+Hint Rewrite elem_of_seq: equiv.
+Hint Rewrite @big_sepL_emp: equiv.
+Lemma allButFirstEmp : ([∗ list] x ∈ seq 1 (Pos.to_nat maxContention -1), 
+       if bool_decide (x = 0%nat)
+       then anyR "int" 1$m
+       else emp)
+                         -|- emp.
+Proof using.
+  erewrite  big_opL_proper with (g := fun _ _=> emp).
+  2:{ intros ? ? Hl.
+      apply elem_of_list_lookup_2 in Hl.
+      autorewrite with equiv in Hl.
+      resolveDecide lia.
+      reflexivity.
+  }
+  autorewrite with equiv.
+  reflexivity.
+Qed.
+Lemma seqprefix (prelen len start: nat):
+  (prelen <= len)%nat -> seq start len = (seq start prelen)++(seq (start+prelen) (len -prelen)).
+Proof using.
+  intros Hl.
+  replace len with (prelen+(len-prelen))%nat at 1 by lia.
+  rewrite seq_app.
+  reflexivity.
+Qed.
+
   Lemma prf2: verify[module] testnew4spec.
   Proof using MOD.
     verify_spec.
@@ -256,17 +283,17 @@ Hint Rewrite elem_of_seq: iff.
     go.
     rewrite <- _at_big_sepL.
     unfold allButFirstContenderId.
-    erewrite  big_opL_proper with (g := fun _ _=> emp).
-    2:{ intros ? ? Hl. unfold Rpiece.
-        apply elem_of_list_lookup_2 in Hl.
-        autorewrite with iff in Hl.
-        resolveDecide lia.
-        reflexivity.
+    unfold Rpiece.
+    rewrite allButFirstEmp. go.
+    provePure.
+    {
+      unfold allContenderIds.
+      rewrite -> seqprefix with (prelen:=1%nat) by lia.
+      simpl.
+      rewrite allButFirstEmp. go.
     }
     go.
-    rewrite big_sepL_emp.
-    go.
-    iExists _, _, Rpiece .
+    iExists _, _, Rpiece.
     unfold upcast_offset.
     normalize_ptrs.
     eagerUnifyU.
