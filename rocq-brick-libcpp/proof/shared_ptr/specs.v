@@ -10,6 +10,14 @@ Require Import bluerock.brick.libcpp.newarr.hints.
 Require Import bluerock.cpp.spec.concepts.
 Require Import bluerock.cpp.spec.concepts.experimental.
 Require Import bluerock.brick.libcpp.shared_ptr.inc_shared_ptr_cpp.
+Lemma seqprefix (prelen len start: nat):
+  (prelen <= len)%nat -> seq start len = (seq start prelen)++(seq (start+prelen) (len -prelen)).
+Proof using.
+  intros Hl.
+  replace len with (prelen+(len-prelen))%nat at 1 by lia.
+  rewrite seq_app.
+  reflexivity.
+Qed.
 
 Definition liftQ {PROP: bi} (p: Qp->PROP) (q:Q) : PROP :=
   match toQp q with
@@ -216,7 +224,9 @@ with temp_arg_to_string (a:temp_arg) : PrimString.string :=
 
 
 Compute (name_to_string fo).
-  
+
+Definition ffff ty := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>.
+(*
   cpp.spec "std::shared_ptr<int>::shared_ptr<int, void>(int* )" as shp with (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
     \pre{p} dynAllocatedR "int" p
@@ -227,7 +237,26 @@ Compute (name_to_string fo).
        this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
        ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
        ).
-*)
+ *)
+
+  Definition shpp ty :=
+    specify {| info_name := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>
+            ; info_type := tCtor ("std::shared_ptr".<<Atype ty>>) [Tptr ty] |}
+(fun (this:ptr) =>
+    \arg{p:ptr} "ownedPtr" (Vptr p)
+    \pre{p} dynAllocatedR "int" p
+    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
+      p |-> Rpiece ctid
+    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1  |]
+    \post Exists (ctrlBlockId: CtrlBlockId),
+       this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
+       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
+       ).
+
+  Definition SpecFor_init_ctor2 := RegisterSpec shpp.
+  #[global] Existing Instance SpecFor_init_ctor2.
+
+  
 
   (** move constructor. the new object represents the same piece of ownership  *)
   cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int>&&)" as shm with (fun (this:ptr) =>
@@ -378,14 +407,6 @@ Proof using.
       reflexivity.
   }
   autorewrite with equiv.
-  reflexivity.
-Qed.
-Lemma seqprefix (prelen len start: nat):
-  (prelen <= len)%nat -> seq start len = (seq start prelen)++(seq (start+prelen) (len -prelen)).
-Proof using.
-  intros Hl.
-  replace len with (prelen+(len-prelen))%nat at 1 by lia.
-  rewrite seq_app.
   reflexivity.
 Qed.
 
