@@ -80,8 +80,8 @@ Section specs.
   Definition SharedPtrR (cppty: type) (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr)  : Rep :=
     structR ("std::shared_ptr".<<Atype cppty>>) 1
     ** [| ([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1 |]
-    ** ownedPtrOffset |-> primR "cppty" 1 (Vptr ownedPtr)
-    ** ctrlBlockPtrOffset |-> primR "cppty" 1 (Vptr (dataLoc id))
+    ** ownedPtrOffset |-> primR (Tptr cppty) 1 (Vptr ownedPtr)
+    ** ctrlBlockPtrOffset |-> primR (Tnamed ("std::atomic".<<Atype "long">>)) 1 (Vptr (dataLoc id))
     ** [| ownedPtr<>nullptr |] (* use NullSharedPtr othewise *)
     ** [| lengthN (contenderLocs id) = Npos maxContention |]
     ** pureR (inv nroot (Exists (ctrVal:N) (pieceOut : nat ->bool) ,
@@ -103,158 +103,26 @@ Section specs.
 
   Definition allButFirstContenderId := (seq 1 (Pos.to_nat maxContention -1 )).
 
-  Context {cppty:type}.
-  Notation sptr := ("std::shared_ptr".<<Atype cppty>>).
-  Definition init_ctor := specify.template.ctor sptr [Tptr cppty] $
-    \this this
+  Section ty.
+  Context {ty:type}.
+
+  Definition init_ctor :=
+    specify {| info_name := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>
+            ; info_type := tCtor ("std::shared_ptr".<<Atype ty>>) [Tptr ty] |} (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
     \pre{p} dynAllocatedR "int" p
     \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
       p |-> Rpiece ctid
-    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR cppty 1  |]
-    (*                                                        ^^ if anyR is not meaningful for non-scalar types, replace this with wp of default destructor *)    
+    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid)
+             |-- anyR ty 1  |]
+    (*           ^^ if anyR is not meaningful for non-scalar types,
+                 replace this with wp of default destructor *)
     \post Exists (ctrlBlockId: CtrlBlockId),
        this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
-       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
-  .
-   
+       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)).
+
   Definition SpecFor_init_ctor := RegisterSpec init_ctor.
   #[global] Existing Instance SpecFor_init_ctor.
-
-
-  Print info_name.
-  Definition fo : name := "std::shared_ptr<int>::shared_ptr<int, void>(int*)".
-
-(*
-The type `name` in Coq comes from cpp semantics in this file. it is a complicated mutual inductive. It has a custom parsing notation.
-It seems there is no way to disable the notation for printing.
-So, it is hard to see the structure of a `name` shown as string, as  `fo` above.
-So your task is write an ugly printier for `name`. it should not prettify but eluciadte the actual structure (the inductive constructors)
-
-*)
- (* We want PrimString literals and [cat]/[++] in scope *)
-Open Scope pstring_scope.
-
-(* Hook up the existing implementations *)
-Definition type_to_string : type → PrimString.string := pretty.printT.
-Definition expr_to_string : Expr → PrimString.string := pretty.printE.
-Definition fq_to_string : function_qualifiers.t → PrimString.string := pretty.printFQ.
-Definition op_to_string : OverloadableOperator → PrimString.string := pretty.printOO.
-Definition N_to_string : N → PrimString.string := N.to_string.
-
-(* A generic printer for lists *)
-Definition print_list {A} (f:A->PrimString.string) (l:list A) : PrimString.string :=
-  let fix go xs :=
-    match xs with
-    | [] => ""
-    | y::ys => cat "," (cat (f y) (go ys))
-    end in
-  match l with
-  | [] => "[]"
-  | x::xs => cat "[" (cat (f x) (cat (go xs) "]"))
-  end.
-
-(* Printer for the atomic_name_ type *)
-Definition atomic_name_to_string (an:atomic_name) : PrimString.string :=
-  match an with
-  | Nid id =>
-      cat "Nid(" (cat id ")")
-  | Nfunction fq id tys =>
-      cat "Nfunction("
-        (cat (fq_to_string fq)
-         (cat "," (cat id (cat "," (cat (print_list type_to_string tys) ")")))))
-  | Nctor tys =>
-      cat "Nctor(" (cat (print_list type_to_string tys) ")")
-  | Ndtor => "Ndtor"
-  | Nop fq op tys =>
-      cat "Nop("
-        (cat (fq_to_string fq)
-         (cat "," (cat (op_to_string op)
-                  (cat "," (cat (print_list type_to_string tys) ")")))))
-  | Nop_conv fq t =>
-      cat "Nop_conv("
-        (cat (fq_to_string fq)
-         (cat "," (cat (type_to_string t) ")")))
-  | Nop_lit id tys =>
-      cat "Nop_lit("
-        (cat id (cat "," (cat (print_list type_to_string tys) ")")))
-  | Nanon n =>
-      cat "Nanon(" (cat (N_to_string n) ")")
-  | Nanonymous => "Nanonymous"
-  | Nfirst_decl id =>
-      cat "Nfirst_decl(" (cat id ")")
-  | Nfirst_child id =>
-      cat "Nfirst_child(" (cat id ")")
-  | Nunsupported_atomic s =>
-      cat "Nunsupported_atomic(" (cat s ")")
-  end.
-
-(* Mutual printer for name and temp_arg *)
-Fixpoint name_to_string (n:name) : PrimString.string :=
-  match n with
-  | Ninst n0 args =>
-      cat "Ninst("
-        (cat (name_to_string n0)
-         (cat "," (cat (print_list temp_arg_to_string args) ")")))
-  | Nglobal an =>
-      cat "Nglobal(" (cat (atomic_name_to_string an) ")")
-  | Ndependent t =>
-      cat "Ndependent(" (cat (type_to_string t) ")")
-  | Nscoped n0 an =>
-      cat "Nscoped("
-        (cat (name_to_string n0)
-         (cat "," (cat (atomic_name_to_string an) ")")))
-  | Nunsupported s =>
-      cat "Nunsupported(" (cat s ")")
-  end
-
-with temp_arg_to_string (a:temp_arg) : PrimString.string :=
-  match a with
-  | Atype t =>
-      cat "Atype(" (cat (type_to_string t) ")")
-  | Avalue e =>
-      cat "Avalue(" (cat (expr_to_string e) ")")
-  | Apack lst =>
-      cat "Apack(" (cat (print_list temp_arg_to_string lst) ")")
-  | Atemplate nm =>
-      cat "Atemplate(" (cat (name_to_string nm) ")")
-  | Aunsupported s =>
-      cat "Aunsupported(" (cat s ")")
-  end.
-
-
-Compute (name_to_string fo).
-
-Definition ffff ty := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>.
-(*
-  cpp.spec "std::shared_ptr<int>::shared_ptr<int, void>(int* )" as shp with (fun (this:ptr) =>
-    \arg{p:ptr} "ownedPtr" (Vptr p)
-    \pre{p} dynAllocatedR "int" p
-    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
-      p |-> Rpiece ctid
-    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1  |]
-    \post Exists (ctrlBlockId: CtrlBlockId),
-       this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
-       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
-       ).
- *)
-
-  Definition shpp ty :=
-    specify {| info_name := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>
-            ; info_type := tCtor ("std::shared_ptr".<<Atype ty>>) [Tptr ty] |}
-(fun (this:ptr) =>
-    \arg{p:ptr} "ownedPtr" (Vptr p)
-    \pre{p} dynAllocatedR "int" p
-    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
-      p |-> Rpiece ctid
-    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1  |]
-    \post Exists (ctrlBlockId: CtrlBlockId),
-       this |-> SharedPtrR "int"  ctrlBlockId Rpiece p
-       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)
-       ).
-
-  Definition SpecFor_init_ctor2 := RegisterSpec shpp.
-  #[global] Existing Instance SpecFor_init_ctor2.
 
   
 
@@ -264,6 +132,15 @@ Definition ffff ty := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty]
     \pre{ctrlBlockId ownedPtr Rpiece} other |-> SharedPtrR "int" ctrlBlockId Rpiece ownedPtr
     \post other  |-> NullSharedPtrR "int"
           ** this |-> SharedPtrR "int"  ctrlBlockId Rpiece ownedPtr).
+
+  Notation spty := ("std::shared_ptr".<<Atype ty>>).
+  Definition move_ctor :=
+    specify.template.ctor spty [Tref (Tref (Tnamed spty))] $
+    \this this
+    \arg{other:ptr} "other" (Vptr other)
+    \pre{ctrlBlockId ownedPtr Rpiece} other |-> SharedPtrR "int" ctrlBlockId Rpiece ownedPtr
+    \post other  |-> NullSharedPtrR "int"
+          ** this |-> SharedPtrR "int"  ctrlBlockId Rpiece ownedPtr.
 
 
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd1 with (fun (this:ptr) =>
@@ -355,13 +232,6 @@ Definition ffff ty := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty]
               copyConstrRight sid ctid)
     ).
 
-  (** proofs: *)
-  Opaque SharedPtrR.
-  
-  Definition observeSharedType r q t Rpiece op:= @observe_fwd _ _ _ (sharedR_typeptr_observe r q t Rpiece op).
-
-  Opaque NullSharedPtrR.
-  Hint Resolve observeSharedType : br_opacity.
 
   
 Lemma one_as_bigsep {PROP: bi} {A} {eqd: EqDecision A} (f  : PROP) l (x: A):
@@ -410,6 +280,14 @@ Proof using.
   reflexivity.
 Qed.
 
+End ty.
+  (** proofs: *)
+  Opaque SharedPtrR.
+  
+  Definition observeSharedType r q t Rpiece op:= @observe_fwd _ _ _ (sharedR_typeptr_observe r q t Rpiece op).
+
+  Opaque NullSharedPtrR.
+  Hint Resolve observeSharedType : br_opacity.
   Lemma prf2: verify[module] testnew4spec.
   Proof using MOD.
     verify_spec.
