@@ -145,6 +145,26 @@ Section specs.
   Definition SpecFor_move_ctor := RegisterSpec move_ctor.
   #[global] Existing Instance SpecFor_move_ctor.
 
+  Definition dtor_spec :=
+    specify.template.dtor spty $
+    \this this
+    \pre{(null:bool) (p:ptr) (sid: if null then unit else prod CtrlBlockId nat) Rpiece}
+      this |-> (match null as b return (if b then unit else prod CtrlBlockId nat) -> Rep with
+                | false => fun sid=>
+                             SharedPtrR "int" sid.1 Rpiece p
+                             ** Rpiece sid.2
+                | true => fun sid=> NullSharedPtrR "int"
+                end) sid
+
+    \post (match null as b return (if b then unit else prod CtrlBlockId nat) -> mpred with
+                | false => fun sid=> copyConstrRight sid.1 sid.2
+                | true => fun sid=> emp
+                end) sid.
+  
+  Definition SpecFor_dtor := RegisterSpec dtor_spec.
+  #[global] Existing Instance SpecFor_dtor.
+
+  (*
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd1 with (fun (this:ptr) =>
     \with (null:bool)
     \pre{(p:ptr) (sid: if null then unit else prod CtrlBlockId nat) Rpiece}
@@ -159,7 +179,7 @@ Section specs.
                 | false => fun sid=> copyConstrRight sid.1 sid.2
                 | true => fun sid=> emp
                 end) sid).
-
+ *)
   (*
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd2 with (fun (this:ptr) =>
     \pre this |-> NullSharedPtrR "int"
