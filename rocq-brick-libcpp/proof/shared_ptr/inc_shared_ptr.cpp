@@ -12,3 +12,10 @@ int * testnew() {
   *x=1;
   return x;
 }
+
+int * testnew2() {
+    int *x=new int[2];
+    x[0]=1;
+    x[1]=2;
+    return x;
+  }

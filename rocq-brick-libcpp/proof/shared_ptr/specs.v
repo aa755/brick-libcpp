@@ -374,5 +374,39 @@ End ty.
     normalize_ptrs.
     go.
   Qed.
+  cpp.spec "testnew2()" as testnew2spec with
+    (
+      \pre emp
+        \post{p:ptr}[Vptr p] dynAllocatedR "int[2]" p
+        ** p |-> arrayR "int" (fun x => primR "int" 1 (Vint x)) [1;2]%Z
+    ).
+  
+    Lemma prf3: verify[module] testnew2spec.
+    Proof using MOD. 
+      verify_spec.
+      go.
+      unfold dynAllocatedR.
+      go.
+      iExists _.
+      eagerUnifyU.
+      go.
+      simpl.
+      rewrite arrayR_eq.
+      unfold arrayR_def.
+      go.
+      rewrite arrR_eq.
+      unfold arrR_def.
+      go.
+      simpl.
+      ego.
+      unfold dynAllocatedR.
+      ego.
+      rewrite arrayR_eq.
+      unfold arrayR_def.
+      go.
+      rewrite arrR_eq.
+      unfold arrR_def.
+      go.
+    Qed.
 
 End specs.
