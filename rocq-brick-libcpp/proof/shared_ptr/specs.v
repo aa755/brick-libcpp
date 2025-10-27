@@ -126,22 +126,24 @@ Section specs.
 
   
 
-  (** move constructor. the new object represents the same piece of ownership  *)
+  (** move constructor. the new object represents the same piece of ownership 
   cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int>&&)" as shm with (fun (this:ptr) =>
     \arg{other:ptr} "other" (Vptr other)
     \pre{ctrlBlockId ownedPtr Rpiece} other |-> SharedPtrR "int" ctrlBlockId Rpiece ownedPtr
     \post other  |-> NullSharedPtrR "int"
           ** this |-> SharedPtrR "int"  ctrlBlockId Rpiece ownedPtr).
-
+ *)
   Notation spty := ("std::shared_ptr".<<Atype ty>>).
   Definition move_ctor :=
-    specify.template.ctor spty [Tref (Tref (Tnamed spty))] $
+    specify.template.ctor spty [Trv_ref ((Tnamed spty))] $
     \this this
     \arg{other:ptr} "other" (Vptr other)
-    \pre{ctrlBlockId ownedPtr Rpiece} other |-> SharedPtrR "int" ctrlBlockId Rpiece ownedPtr
+    \pre{ctrlBlockId ownedPtr Rpiece} other |-> SharedPtrR ty ctrlBlockId Rpiece ownedPtr
     \post other  |-> NullSharedPtrR "int"
           ** this |-> SharedPtrR "int"  ctrlBlockId Rpiece ownedPtr.
 
+  Definition SpecFor_move_ctor := RegisterSpec move_ctor.
+  #[global] Existing Instance SpecFor_move_ctor.
 
   cpp.spec "std::shared_ptr<int>::~shared_ptr()" as shd1 with (fun (this:ptr) =>
     \with (null:bool)
