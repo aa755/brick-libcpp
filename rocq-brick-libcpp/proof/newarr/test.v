@@ -12,6 +12,9 @@ Require Import bluerock.cpp.spec.concepts.experimental.
 Require Import bluerock.brick.libcpp.newarr.test_cpp.
 Require Import bluerock.cpp.stdlib.new.hints.
 
+Import linearity.
+Disable Notation "::wpOperand".
+Print new_delete.wp_operand_array_new_glob.
 Section specsproofs.
   Context `{Σ : cpp_logic, MOD:test_cpp.module ⊧ σ}.
 
@@ -20,11 +23,16 @@ Section specsproofs.
       match (size_of _ ty) with
       | Some sz => bookKeepingLoc |-> pred.allocatedR 1 (overhead+sz)
       | None => False
+      end **
+      match ty with
+      | Tint  => [| overhead = 0%N |]
+      | _ =>  True (* TODO: this needs to be strengthened for many cases *)
       end
       **  (base |-> new_token.R 1
                 {| new_token.alloc_ty := ty;
                    new_token.storage_ptr := bookKeepingLoc.["unsigned char" ! overhead];
-                   new_token.overhead := overhead |}).
+                  new_token.overhead := overhead |}).
+  
   cpp.spec "testnew()" as testnewspec with (
     \pre emp
     \post{p:ptr}[Vptr p] dynAllocatedR "int" p ** p |-> primR "int" 1 (Vint 1)
@@ -87,6 +95,53 @@ Section specsproofs.
     go;[ego|].
     Transparent dynAllocatedR.
     go.
-  Abort.
+    case_bool_decide; Forward.rwHyps; try go;[].
+    go.
+    normalize_ptrs.
+    go.
+  Qed.
+  
+  cpp.spec "testnewarrdel()" as testnewarrdelspec with (
+        \post emp).
+
+  Lemma anyRexpand (x:ptr) ty (n:N) q:
+    ([∗list] i ∈ (seqN 0 n), x.[ty ! Z.of_N i] |-> anyR ty q) |-- x |-> anyR (Tarray ty n) q.
+  Proof. Admitted.
+
+  Lemma trueemp: True ⊢ emp:mpred.
+  Proof. Admitted.
+
+  Lemma allocatedNullForget q (sz:N):
+    (0<sz)%N ->
+    nullptr |-> allocatedR q sz |-- emp.
+  Proof using. Admitted.
+    
+  Lemma prf2del: verify[module] testnewarrdelspec.
+  Proof using MOD.
+    verify_spec.
+    go;[ego|].
+    Transparent dynAllocatedR.
+    Search arrayR nullptr.
+    go.
+    rewrite arrayR_eq.
+    unfold arrayR_def.
+    go.
+    rewrite arrR_eq.
+    unfold arrR_def.
+    go.
+    case_bool_decide; subst; try go.
+    rewrite <- anyRexpand.
+    unfold seqN.
+    simpl.
+    go.
+    normalize_ptrs.
+    replace (overhead + - overhead)%Z with 0%Z by lia.
+    normalize_ptrs.
+    go.
+    case_bool_decide; Forward.rwHyps; try go.
+    { rewrite <- allocatedNullForget;[| lia]. eagerUnifyU. go. iClear "#". iStopProof. auto. apply trueemp.
+    }
+    { iClear "#". iStopProof. auto. apply trueemp. }
+  Qed.
 
 End specsproofs.

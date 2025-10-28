@@ -52,6 +52,7 @@ Section specs.
 
   Import linearity.
 
+  (* TODO: dedup from newarr/test.v *)
   Definition dynAllocatedR ty (base:ptr) : mpred :=
     Exists (bookKeepingLoc:ptr) (overhead:N),
       match (size_of _ ty) with
@@ -186,36 +187,43 @@ Section specs.
     \post emp).
   *)
 
-  (** Copy-ctor from non-null: consumes one contenderToken*)
-  cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int> const&)" as shc1
-    with (fun (this:ptr) =>
+
+  Definition copy_ctor :=
+    specify.template.ctor spty [Tref (Tconst (Tnamed spty))] $
+    \this this
     \arg{other:ptr} "other" (Vptr other)
     \pre{id ctid p Rpiece}
          other |-> SharedPtrR "int" id Rpiece p
          ** copyConstrRight id ctid (* this will be returned by destructor *)
     \post
          p|->Rpiece ctid ** this  |-> SharedPtrR "int" id Rpiece p
-          ** other |-> SharedPtrR "int" id Rpiece p
-       ).
+          ** other |-> SharedPtrR "int" id Rpiece p.
+                          
+  Definition SpecFor_copy_ctor := RegisterSpec copy_ctor.
+  #[global] Existing Instance SpecFor_copy_ctor.
 
   (** Copy-ctor from null: produces another null shared_ptr.
       No token is required. TODO: unify this spec with the spec above, using dependent types, as done in the destructor spec *)
-  cpp.spec "std::shared_ptr<int>::shared_ptr(std::shared_ptr<int> const&)" as shc2
-    with (fun (this:ptr) =>
+  Definition copy_ctor_null :=
+    specify.template.ctor spty [Tref (Tconst (Tnamed spty))] $
+    \this this
     \arg{other:ptr} "other" (Vptr other)
-    \pre  other |-> NullSharedPtrR "int"
-    \post this  |-> NullSharedPtrR "int"
-       ** other |-> NullSharedPtrR "int").
+    \pre{id ctid p Rpiece}
+         other |-> SharedPtrR "int" id Rpiece p
+         ** copyConstrRight id ctid (* this will be returned by destructor *)
+    \post
+         p|->Rpiece ctid ** this  |-> SharedPtrR "int" id Rpiece p
+          ** other |-> SharedPtrR "int" id Rpiece p.
 
 
   Definition SP_acc  := ("std::__shared_ptr_access" .<< 
-                           Atype "int",
+                           Atype ty,
                            Avalue (Eint 2 "enum __gnu_cxx::_Lock_policy"),
                            Avalue (Eint 0 "bool"),
                            Avalue (Eint 0 "bool") >>)%cpp_name.
 
   Definition SP_impl := ("std::__shared_ptr" .<< 
-                           Atype "int",
+                           Atype ty,
                            Avalue (Eint 2 "enum __gnu_cxx::_Lock_policy") >>)%cpp_name.
 
   Definition SP := "std::shared_ptr<int>"%cpp_name.
@@ -224,14 +232,25 @@ Section specs.
   Definition upcast_offset : offset :=
     (o_derived σ SP_acc SP_impl ,, o_derived σ SP_impl SP).
 
+  (*
   cpp.spec (SP_acc.::Nop function_qualifiers.Nc OOStar []) as shg with 
     (fun (this:ptr) =>
        \prepost{id p Rpiece} this |-> upcast_offset |-> SharedPtrR "int" id Rpiece p
        \post[Vptr p] emp
        ).
+*)
+  Definition deref :=
+    specify.template.op SP_acc OOStar function_qualifiers.Nc (Tref ty) [] $
+       \this this
+       \prepost{id p Rpiece} this |-> upcast_offset |-> SharedPtrR "int" id Rpiece p
+       \post[Vref p] emp.
 
+  Definition SpecFor_deref := RegisterSpec deref.
+  #[global] Existing Instance SpecFor_deref.
+  
   #[global] Instance sharedR_typeptr_observe ty id (p:ptr) op Rpiece
     : Observe (type_ptr (Tnamed ("std::shared_ptr".<<Atype ty>>)) p) (p|->SharedPtrR ty id Rpiece op):= _.
+  
 
   Definition allPiecesAndObjs Rpiece id (ownedPtr: ptr) (pieceOut: nat->bool) : Rep :=
    ([∗ list] ctid ∈ allContenderIds,
@@ -339,6 +358,7 @@ End ty.
       simpl.
       rewrite allButFirstEmp. go.
     }
+    go.
     go.
     iExists _, _, Rpiece.
     unfold upcast_offset.
