@@ -1,15 +1,18 @@
 (** Specs of shared_ptr.
 We do not cover interaction with weak_ptr.
 We cover the following usage:
-- after dynamically allocating a new object (using new or new[]), it is immediately passed to the init constructor of shared_ptr (spec in init_ctor below). At this time, the caller's proof needs to come up with [Rpiece: nat->Rep], defining how the ownership of this newly allocated object will be split between various shared_ptr objects that refer to it. They pass in all pieces and get back the 0th piece: [Rpiece 0] and tokens [copyConstrRight ctrlid 1 ... copyConstrRight ctrlid (maxContention-1)] which the clients can use to make further copies of the returned shared_ptr object. The last argument of [copyConstrRight] is the piece id. [ctrlid] identifies a single protection unit (payload object pointer) that is reference counted. The name comes from the implementation using a dynamically allocated "control block" which has an atomic counter to track how many times the copy constructor has been called minus the number of such objects that have already been deleted.
-To ensure the destructor proof goes through, the init ctor requires [ [∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1].
+- after dynamically allocating a new object (using new or new[]), it is (typicall immediately) passed to the init constructor of shared_ptr (spec in [init_ctor] below). At this time, the caller's proof needs to come up with [Rpiece: nat->Rep], defining how the ownership of this newly allocated object will be split between various shared_ptr objects that refer to it. They pass in all pieces and get back the 0th piece: [Rpiece 0] and tokens [pieceRight ctrlid 1 ... pieceRight ctrlid (maxContention-1)] which the clients can use to later obtain ownership of those [Rpiece]s by calling the copy constructor. The last argument of [pieceRight] is the piece id. The first argument, [ctrlid], identifies a single protection unit (payload object pointer) that is reference counted. "ctrl" comes from the implementation using a dynamically allocated "control block" which has an atomic counter to track how many times the copy constructor has been called minus the number of such objects that have already been destructed. [maxContention] would typically be 2^64, to prevent overflow of the reference counter.
+
+To ensure the destructor proof goes through, the init ctor requires [ [∗ list] ctid ∈ allPieceIds, Rpiece ctid) |-- anyR ty 1].
+If anyR does not make sense for Tnamed, then it should be replaced with the \pre of the default constructor of those Tnamed types.
+
 The pieces may not always be fractional ownerships of an object (e.g. int). For example, when the shared_ptr protects an array, it is common to have every piece own an index of the array, so that different shared_ptr objects can be used to write to different indices concurrently.
 
-- To gain confidence in the provability of these specs, we sketch a definition of [SharedPtrR]. The invariant definition is interesting there: it stores all the [Rpiece] and [copyConstrRight] ownerships that need to be dished out later or to be used for deletion when the reference count goes to 0.
-Because bluerock only supports SC atomics, the proof only works as if the stdlib implementation used SC atomics or had sufficient barriers.
+- To gain confidence in the provability of these specs, we sketch a definition of [SharedPtrR]. The [inv] definition is interesting there: it stores all the [Rpiece] and [pieceRight] ownerships that need to be dished out later or to be used for deletion when the reference count goes to 0.
+Because bluerock only supports SC atomics, the proof only works as if the stdlib implementation used SC atomics or had sufficient barriers (the actual defn of SharedPtrR will be different in that case due to limitations on invariants in weak memory reasoning).
 
 - when calling the copy constructor, the caller's proof has to come up with their pieceid (< maxContention) and give up
-[copyConstrRight ctrlid pieceid], which they only get back when the newly constructed object is deleted.
+[pieceRight ctrlid pieceid], which they only get back when the newly constructed object is deleted.
 They get [Rpiece pieceid] in return: their piece of the ownership of the payload object.
 The control block id (representing the location of the atomic reference counter) remains the same.
 The proof will atomically increment the counter to take out the Rpiece from the invariant.
@@ -38,7 +41,7 @@ Require Import bluerock.brick.libcpp.shared_ptr.inc_shared_ptr_cpp.
 
 Record CtrlBlockId : Set :=
   {
-    contenderLocs: list gname; (* each stores a unit. N -> gname may be tricky for constructor proof *)
+    pieceRightLocs: list gname; (* each stores a unit. N -> gname may be tricky for constructor proof *)
     dataLoc: ptr;
   }.
 
@@ -53,8 +56,8 @@ Definition ctrlBlockPtrOffset: offset. Proof. Admitted.
 
 Lemma maxContentionLb : 2^32 <= Npos maxContention. Proof. Admitted.
 Definition maxContentionQp := pos_to_Qp maxContention.
-Definition allContenderIds : list nat := (seq 0 (Pos.to_nat maxContention)).
-Definition allButFirstContenderId := (seq 1 (Pos.to_nat maxContention -1 )).
+Definition allPieceIds : list nat := (seq 0 (Pos.to_nat maxContention)).
+Definition allButFirstPieceId := (seq 1 (Pos.to_nat maxContention -1 )).
 
 Definition countLN {A : Type} (f : A -> bool) (l : list A) : N :=
   lengthN (filter f l).
@@ -66,32 +69,32 @@ Section specs.
   Import linearity.
 
 
-  (* just an exclusive token for each contenderid. can be defined with a simpler CMRA as fractionality is not needed. fgptsoQ has good automation support  *)
-  Definition copyConstrRight ctrlid contenderid : mpred :=
-    match nth_error (contenderLocs ctrlid) contenderid with
+  (* just an exclusive token for each pieceid. can be defined with a simpler CMRA as fractionality is not needed. fgptsoQ has good automation support  *)
+  Definition pieceRight ctrlid pieceid : mpred :=
+    match nth_error (pieceRightLocs ctrlid) pieceid with
     | Some g => fgptstoQ g 1 tt
-    | None => emp (* bad argument, contenderid > maxContention *)
+    | None => emp (* bad argument, pieceid > maxContention *)
     end.
       
 
   Definition sptrInv (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr) (pieceOut : nat ->bool) :=
-    let ctrVal := countLN pieceOut allContenderIds in
+    let ctrVal := countLN pieceOut allPieceIds in
     (dataLoc id),, ctrOffset |-> atomic.R "long" 1 (Z.of_N ctrVal)
          ** (if (bool_decide (ctrVal = 0))
               then emp
               else dynAllocatedR ty ownedPtr
-                    ** ([∗ list] ctid ∈ allContenderIds,
-                      if pieceOut ctid then copyConstrRight id ctid else ownedPtr |-> Rpiece ctid)).
+                    ** ([∗ list] ctid ∈ allPieceIds,
+                      if pieceOut ctid then pieceRight id ctid else ownedPtr |-> Rpiece ctid)).
   
   (** Currently, we assume the control block is just an atomic counter.
       In reality, it is probably a struct. so move the atomicR to some defn ctrlBlockR *)
   Definition SharedPtrR (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr)  : Rep :=
     structR ("std::shared_ptr".<<Atype ty>>) 1
-    ** [| ([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1 |]
+    ** [| ([∗ list] ctid ∈ allPieceIds, Rpiece ctid) |-- anyR ty 1 |]
     ** ownedPtrOffset |-> primR (Tptr ty) 1 (Vptr ownedPtr)
     ** ctrlBlockPtrOffset |-> primR (Tptr (Tnamed ("std::atomic".<<Atype "long">>))) 1 (Vptr (dataLoc id))
     ** [| ownedPtr<>nullptr |] (* use NullSharedPtr otherwise *)
-    ** [| lengthN (contenderLocs id) = Npos maxContention |]
+    ** [| lengthN (pieceRightLocs id) = Npos maxContention |]
     ** pureR (inv nroot (Exists (pieceOut : nat ->bool), sptrInv id Rpiece ownedPtr pieceOut)).
 
   Definition NullSharedPtrR : Rep :=
@@ -105,15 +108,15 @@ Section specs.
             ; info_type := tCtor ("std::shared_ptr".<<Atype ty>>) [Tptr ty] |} (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
     \pre{p} dynAllocatedR ty p
-    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
+    \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstPieceId,
       p |-> Rpiece ctid
-    \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid)
+    \pre [|([∗ list] ctid ∈ allPieceIds, Rpiece ctid)
              |-- anyR ty 1  |]
     (*           ^^ if anyR is not meaningful for non-scalar types,
                  replace this with wp of default destructor *)
     \post Exists (ctrlBlockId: CtrlBlockId),
        this |-> SharedPtrR ctrlBlockId Rpiece p
-       ** ([∗ list] ctid ∈ allButFirstContenderId, copyConstrRight ctrlBlockId ctid)).
+       ** ([∗ list] ctid ∈ allButFirstPieceId, pieceRight ctrlBlockId ctid)).
 
   Definition SpecFor_init_ctor := RegisterSpec init_ctor.
   #[global] Existing Instance SpecFor_init_ctor.
@@ -142,7 +145,7 @@ Section specs.
                 end) sid
 
     \post (match null as b return (if b then unit else prod CtrlBlockId nat) -> mpred with
-                | false => fun sid=> copyConstrRight sid.1 sid.2
+                | false => fun sid=> pieceRight sid.1 sid.2
                 | true => fun sid=> emp
                 end) sid.
   
@@ -155,7 +158,7 @@ Section specs.
     \this this
     \arg{other:ptr} "other" (Vptr other)
     \pre{id ctid p Rpiece} other |-> SharedPtrR id Rpiece p
-    \pre copyConstrRight id ctid (* this will be returned by destructor *)
+    \pre pieceRight id ctid (* this will be returned by destructor *)
     \pre [| N.of_nat ctid < Npos maxContention|]%N
     \post
          p|->Rpiece ctid ** this  |-> SharedPtrR id Rpiece p
@@ -203,11 +206,11 @@ Section specs.
   
 
   Definition allPiecesAndObjs Rpiece id (ownedPtr: ptr) (pieceOut: nat->bool) : Rep :=
-   ([∗ list] ctid ∈ allContenderIds,
+   ([∗ list] ctid ∈ allPieceIds,
      if pieceOut ctid
      then pureR (ownedPtr |-> Rpiece ctid)
           ** pureR (Exists (base:ptr), base |->SharedPtrR id Rpiece ownedPtr)
-     else pureR (copyConstrRight id ctid)).
+     else pureR (pieceRight id ctid)).
 
   Lemma redistributePayloadOwnership {Rpieceold Rpiecenew: nat -> Rep} (pieceOut : nat -> bool) id ownedPtr:
     allPiecesAndObjs Rpieceold id ownedPtr pieceOut

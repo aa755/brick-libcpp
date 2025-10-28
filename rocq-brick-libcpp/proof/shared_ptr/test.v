@@ -65,8 +65,8 @@ Section proofs.
     \post{p:ptr}[Vptr p] Exists payload sid,
        p |-> SharedPtrR "int" sid (fun ctid => if bool_decide (ctid=0%nat) then anyR "int" 1 else emp) payload
        ** payload |-> intR (cQp.m 1) 1
-       ** ([∗ list] ctid ∈ allButFirstContenderId,
-              copyConstrRight sid ctid)
+       ** ([∗ list] ctid ∈ allButFirstPieceId,
+              pieceRight sid ctid)
     ).
 
 
@@ -109,12 +109,12 @@ Section proofs.
     eagerUnifyU.
     go.
     rewrite <- _at_big_sepL.
-    unfold allButFirstContenderId.
+    unfold allButFirstPieceId.
     unfold Rpiece.
     rewrite allButFirstEmp. go.
     provePure.
     {
-      unfold allContenderIds.
+      unfold allPieceIds.
       rewrite -> seqprefix with (prelen:=1%nat) by lia.
       simpl.
       rewrite allButFirstEmp. go.
