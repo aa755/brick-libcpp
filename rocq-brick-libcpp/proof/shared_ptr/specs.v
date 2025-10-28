@@ -1,7 +1,7 @@
 (** Specs of shared_ptr.
 We do not cover interaction with weak_ptr.
 We cover the following usage:
-- after dynamically allocating a new object (using new or new[]), it is immediately passed to the init constructor of shared_ptr (spec in init_ctor bwlow). At this time, the caller's proof needs to come up with [Rpiece: nat->Rep], defining how the ownership of this newly allocated object will be split between various shared_ptr objects that refer to it. They get back the 0th piece: [Rpiece 0] and tokens [copyConstrRight ctrlid 1 ... copyConstrRight ctrlid (maxContention-1)]  which the clients can use to make further copies of the returnes shared_ptr object. The last argument of [copyConstrRight] is the piece id. [ctrlid] identifies a single protection unit (payload object pointer) that is reference counted. The name comes from the implementation using a dynamically allocated "control block" which has an atomic counter to track how many times the copy constructor has been called - number of such objects that have already been delected.
+- after dynamically allocating a new object (using new or new[]), it is immediately passed to the init constructor of shared_ptr (spec in init_ctor bwlow). At this time, the caller's proof needs to come up with [Rpiece: nat->Rep], defining how the ownership of this newly allocated object will be split between various shared_ptr objects that refer to it. They pass in all pieces and get back the 0th piece: [Rpiece 0] and tokens [copyConstrRight ctrlid 1 ... copyConstrRight ctrlid (maxContention-1)]  which the clients can use to make further copies of the returnes shared_ptr object. The last argument of [copyConstrRight] is the piece id. [ctrlid] identifies a single protection unit (payload object pointer) that is reference counted. The name comes from the implementation using a dynamically allocated "control block" which has an atomic counter to track how many times the copy constructor has been called - number of such objects that have already been delected.
 To ensure the destructor proof goes through, the iniit ctor : [ [∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1]
 
 - To gain confidence in the provability of these specs, we sketch a definition of [SharedPtrR]. The invariant definition is interesting there: it stores all the [Rpeice] and [copyConstrRight] ownerships that need to be dished out later or to be used for deletion when the reference count goes to 0.
@@ -72,24 +72,26 @@ Section specs.
     | None => emp (* bad argument, contenderid > maxContention *)
     end.
       
+
+  Definition sptrInv (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr) (pieceOut : nat ->bool) :=
+    let ctrVal := countLN pieceOut allContenderIds in
+    (dataLoc id),, ctrOffset |-> atomic.R "long" 1 (Z.of_N ctrVal)
+         ** (if (bool_decide (ctrVal = 0))
+              then emp
+              else dynAllocatedR ty ownedPtr
+                    ** ([∗ list] ctid ∈ allContenderIds,
+                      if pieceOut ctid then copyConstrRight id ctid else ownedPtr |-> Rpiece ctid)).
   
   (** Currently, we assume the control block is just an atomic counter.
       In reality, it is probably a struct. so move the atomicR to some defn ctrlBlockR *)
   Definition SharedPtrR (id: CtrlBlockId) (Rpiece : nat -> Rep) (ownedPtr:ptr)  : Rep :=
     structR ("std::shared_ptr".<<Atype ty>>) 1
-    ** [| ([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR "int" 1 |]
+    ** [| ([∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1 |]
     ** ownedPtrOffset |-> primR (Tptr ty) 1 (Vptr ownedPtr)
     ** ctrlBlockPtrOffset |-> primR (Tptr (Tnamed ("std::atomic".<<Atype "long">>))) 1 (Vptr (dataLoc id))
     ** [| ownedPtr<>nullptr |] (* use NullSharedPtr othewise *)
     ** [| lengthN (contenderLocs id) = Npos maxContention |]
-    ** pureR (inv nroot (Exists (ctrVal:N) (pieceOut : nat ->bool) ,
-         (dataLoc id),, ctrOffset |-> atomic.R "long" 1 (Z.of_N ctrVal)
-         ** ([∗ list] ctid ∈ allContenderIds,
-             if pieceOut ctid then copyConstrRight id ctid else ownedPtr |-> Rpiece ctid)
-         ** [| countLN pieceOut allContenderIds  = ctrVal |]
-         ** (if (bool_decide (ctrVal = 0))
-              then emp
-              else dynAllocatedR ty ownedPtr))).
+    ** pureR (inv nroot (Exists (pieceOut : nat ->bool), sptrInv id Rpiece ownedPtr pieceOut)).
 
   Definition NullSharedPtrR : Rep :=
     structR ("std::shared_ptr".<<Atype ty>>) 1
@@ -101,7 +103,7 @@ Section specs.
     specify {| info_name := (Nscoped ("std::shared_ptr".<<Atype ty>>) (Nctor [Tptr ty])).<<Atype ty, Atype "void">>
             ; info_type := tCtor ("std::shared_ptr".<<Atype ty>>) [Tptr ty] |} (fun (this:ptr) =>
     \arg{p:ptr} "ownedPtr" (Vptr p)
-    \pre{p} dynAllocatedR "int" p
+    \pre{p} dynAllocatedR ty p
     \pre{Rpiece: nat -> Rep} [∗ list] ctid ∈ allButFirstContenderId,
       p |-> Rpiece ctid
     \pre [|([∗ list] ctid ∈ allContenderIds, Rpiece ctid)
@@ -151,9 +153,9 @@ Section specs.
     specify.template.ctor spty [Tref (Tconst (Tnamed spty))] $
     \this this
     \arg{other:ptr} "other" (Vptr other)
-    \pre{id ctid p Rpiece}
-         other |-> SharedPtrR id Rpiece p
-         ** copyConstrRight id ctid (* this will be returned by destructor *)
+    \pre{id ctid p Rpiece} other |-> SharedPtrR id Rpiece p
+    \pre copyConstrRight id ctid (* this will be returned by destructor *)
+    \pre [| N.of_nat ctid < Npos maxContention|]%N
     \post
          p|->Rpiece ctid ** this  |-> SharedPtrR id Rpiece p
           ** other |-> SharedPtrR id Rpiece p.
@@ -167,13 +169,10 @@ Section specs.
     specify.template.ctor spty [Tref (Tconst (Tnamed spty))] $
     \this this
     \arg{other:ptr} "other" (Vptr other)
-    \pre{id ctid p Rpiece}
-         other |-> SharedPtrR id Rpiece p
-         ** copyConstrRight id ctid (* this will be returned by destructor *)
-    \post
-         p|->Rpiece ctid ** this  |-> SharedPtrR id Rpiece p
-          ** other |-> SharedPtrR id Rpiece p.
-
+    \pre other |-> NullSharedPtrR
+    \post this  |-> NullSharedPtrR
+          ** other |-> NullSharedPtrR.
+               
 
   Definition SP_acc  := ("std::__shared_ptr_access" .<< 
                            Atype ty,
@@ -185,11 +184,9 @@ Section specs.
                            Atype ty,
                            Avalue (Eint 2 "enum __gnu_cxx::_Lock_policy") >>)%cpp_name.
 
-  Definition SP := "std::shared_ptr<int>"%cpp_name.
-
   (** Reconstruct the most-derived object pointer from the base-subobject "this". *)
   Definition upcast_offset : offset :=
-    (o_derived σ SP_acc SP_impl ,, o_derived σ SP_impl SP).
+    (o_derived σ SP_acc SP_impl ,, o_derived σ SP_impl spty).
 
   Definition deref :=
     specify.template.op SP_acc OOStar function_qualifiers.Nc (Tref ty) [] $
@@ -208,7 +205,7 @@ Section specs.
    ([∗ list] ctid ∈ allContenderIds,
      if pieceOut ctid
      then pureR (ownedPtr |-> Rpiece ctid)
-          ** SharedPtrR id Rpiece ownedPtr
+          ** pureR (Exists (base:ptr), base |->SharedPtrR id Rpiece ownedPtr)
      else pureR (copyConstrRight id ctid)).
 
   Lemma redistributePayloadOwnership {Rpieceold Rpiecenew: nat -> Rep} (pieceOut : nat -> bool) id ownedPtr:
@@ -262,7 +259,7 @@ Section proofs.
   (** proofs: *)
   Opaque SharedPtrR.
   Context `{Σ : cpp_logic, MOD:inc_shared_ptr_cpp.module ⊧ σ}
-  {hf:fracG () _Σ} (ty:type).
+  {hf:fracG () _Σ}.
   
   Definition observeSharedType r q t Rpiece op:= @observe_fwd _ _ _ (sharedR_typeptr_observe r q t Rpiece op).
 
@@ -277,9 +274,9 @@ Section proofs.
 
 
 
-  Lemma allButFirstEmp : ([∗ list] x ∈ seq 1 (Pos.to_nat maxContention -1), 
+  Lemma allButFirstEmp ty : ([∗ list] x ∈ seq 1 (Pos.to_nat maxContention -1), 
        if bool_decide (x = 0%nat)
-       then anyR "int" 1$m
+       then anyR ty 1$m
        else emp)
                          -|- emp.
   Proof using.
