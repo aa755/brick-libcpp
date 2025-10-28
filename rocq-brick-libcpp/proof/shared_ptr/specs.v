@@ -2,7 +2,8 @@
 We do not cover interaction with weak_ptr.
 We cover the following usage:
 - after dynamically allocating a new object (using new or new[]), it is immediately passed to the init constructor of shared_ptr (spec in init_ctor bwlow). At this time, the caller's proof needs to come up with [Rpiece: nat->Rep], defining how the ownership of this newly allocated object will be split between various shared_ptr objects that refer to it. They pass in all pieces and get back the 0th piece: [Rpiece 0] and tokens [copyConstrRight ctrlid 1 ... copyConstrRight ctrlid (maxContention-1)]  which the clients can use to make further copies of the returnes shared_ptr object. The last argument of [copyConstrRight] is the piece id. [ctrlid] identifies a single protection unit (payload object pointer) that is reference counted. The name comes from the implementation using a dynamically allocated "control block" which has an atomic counter to track how many times the copy constructor has been called - number of such objects that have already been delected.
-To ensure the destructor proof goes through, the iniit ctor : [ [∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1]
+To ensure the destructor proof goes through, the iniit ctor : [ [∗ list] ctid ∈ allContenderIds, Rpiece ctid) |-- anyR ty 1].
+The pieces may not always be fractional ownerships of an object (e.g. int). For example, when the shared_ptr protects an array, it is common to have every piece own an index of the array, so that different shared_ptr objects can be used to write to different indices concurrently.
 
 - To gain confidence in the provability of these specs, we sketch a definition of [SharedPtrR]. The invariant definition is interesting there: it stores all the [Rpeice] and [copyConstrRight] ownerships that need to be dished out later or to be used for deletion when the reference count goes to 0.
 Because bluerock only supports SC atomics, the proof only works as if the stdlib implementation used SC atomics or had sufficient barriers.
@@ -16,7 +17,7 @@ The proof will atomically increment the counter to take out the Rpiece from the 
 - There is another Rep predicate: [NullSharedPtrR]: for the case when the shared ptr represents a dummy null ptr, e.g. after a move constructor transfers away the ownerships to a new object.
 
 - These specs in this file allow you to change the ownership split protocol (between the various shared_ptr objects protecting the same payload object ptr) lateron (see lemma [redistributePayloadOwnership]), as long as the caller can cough up all pieces and objects associated with the payload (see [allPiecesAndObjs]).
-
+A common pattern where this can be useful is when the thread that calls new needs to initialize the object after wrapping it in a shared_ptr but before sharing it with other concurrent threads. So until that event, it will have the execlusive ownership of the entire object (Rpeice n = emp for n>0, Rpiece 0= objR 1) and later, we redistribute with (Rpiece n => objR (1/N)).
 
 *)
 
