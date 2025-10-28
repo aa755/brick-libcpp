@@ -211,7 +211,7 @@ Section specs.
 
   Lemma redistributePayloadOwnership {Rpieceold Rpiecenew: nat -> Rep} (pieceOut : nat -> bool) id ownedPtr:
     allPiecesAndObjs Rpieceold id ownedPtr pieceOut
-      |-- allPiecesAndObjs Rpiecenew id ownedPtr pieceOut.
+      |-- |={⊤}=> allPiecesAndObjs Rpiecenew id ownedPtr pieceOut.
   Proof. Admitted.
 
 
