@@ -190,7 +190,13 @@ Section specs.
 
   Definition payload_releasable (id : CtrlBlockId) (Rpiece : nat -> Rep) : mpred :=
     match payload_delete id with
-    | Some (op, alignment) => payload_deletable (payload_type id) op alignment Rpiece
+    | Some (op, alignment) =>
+        (* Keep selection evidence in each handle: the allocation invariant
+           alone does not distinguish different deallocation functions. *)
+        [| exists tu : translation_unit,
+             tu ⊧ σ /\
+             shared_ptr_delete_operator tu (payload_type id) = Some op |] **
+        payload_deletable (payload_type id) op alignment Rpiece
     | None => payload_destructible (payload_type id) Rpiece
     end.
 

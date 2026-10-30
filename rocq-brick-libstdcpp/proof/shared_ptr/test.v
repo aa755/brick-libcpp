@@ -23,6 +23,26 @@ Example selected_class_array_delete :
 Proof. vm_compute. reflexivity. Qed.
 
 
+Section deletion_selection.
+  Context `{Σ : cpp_logic} {σ : genv} {hf : fracG () _Σ}.
+  Set Default Goal Selector "!".
+  #[local] Hint Opaque pieceHandle sptrInv : sl_opacity.
+
+  Lemma raw_handle_retains_delete_selection ty q id i R p (handle : ptr) op alignment :
+    payload_delete id = Some (op, alignment) ->
+    handle |-> SharedPtrR ty q id i R p |--
+      [| exists tu : translation_unit,
+           tu ⊧ σ /\
+           shared_ptr_delete_operator tu (payload_type id) = Some op |].
+  Proof.
+    intros Hdelete.
+    unfold SharedPtrR, payload_releasable.
+    rewrite Hdelete.
+    go.
+  Qed.
+End deletion_selection.
+
+
 (* TODO: upstream the hints/lemmas, to where? *)
 Hint Resolve NoDup_seq : setsolver.
 Hint Rewrite elem_of_seq: equiv.
