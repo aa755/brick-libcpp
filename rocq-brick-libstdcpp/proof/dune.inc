@@ -87,6 +87,17 @@
    (with-stderr-to inc_cstring_cpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o inc_cstring_cpp.v --no-elaborate --templates=inc_cstring_cpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps inc_cstring.cpp))
 )
+(subdir immintrin
+ (rule
+  (targets inc_immintrin_cpp.v.stderr inc_immintrin_cpp.v inc_immintrin_cpp_templates.v)
+  (alias test_ast)
+  (deps
+   (:input inc_immintrin.cpp)
+   (glob_files_rec ../*.hpp))
+  (action
+   (with-stderr-to inc_immintrin_cpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o inc_immintrin_cpp.v --no-elaborate --templates=inc_immintrin_cpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
+ (alias (name srcs) (deps inc_immintrin.cpp))
+)
 (subdir initializer_list
  (rule
   (targets inc_initializer_list_cpp.v.stderr inc_initializer_list_cpp.v inc_initializer_list_cpp_templates.v)
@@ -186,24 +197,6 @@
    (with-stderr-to test_cpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o test_cpp.v --no-elaborate --templates=test_cpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps test.cpp))
 )
-(subdir shared_ptr
- (rule
-  (targets inc_shared_ptr_cpp.v.stderr inc_shared_ptr_cpp.v)
-  (alias test_ast)
-  (deps (:input inc_shared_ptr.cpp) (glob_files_rec ../*.hpp) (universe))
-  (action
-  	 (with-stderr-to inc_shared_ptr_cpp.v.stderr (run cpp2v -v %{input} -o inc_shared_ptr_cpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
- (alias (name srcs) (deps inc_shared_ptr.cpp))
-)
-(subdir shared_ptr
- (rule
-  (targets test_cpp.v.stderr test_cpp.v)
-  (alias test_ast)
- (deps (:input test.cpp) (glob_files_rec ../*.hpp) (universe))
-  (action
-  	 (with-stderr-to test_cpp.v.stderr (run cpp2v -v %{input} -o test_cpp.v  -- -std=c++20 -stdlib=libstdc++ ))))
- (alias (name srcs) (deps test.cpp))
-)
 (subdir shared_mutex
  (rule
   (targets inc_hpp.v.stderr inc_hpp.v inc_hpp_templates.v)
@@ -214,6 +207,28 @@
   (action
    (with-stderr-to inc_hpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o inc_hpp.v --no-elaborate --templates=inc_hpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
  (alias (name srcs) (deps inc.hpp))
+)
+(subdir shared_ptr
+ (rule
+  (targets inc_shared_ptr_cpp.v.stderr inc_shared_ptr_cpp.v inc_shared_ptr_cpp_templates.v)
+  (alias test_ast)
+  (deps
+   (:input inc_shared_ptr.cpp)
+   (glob_files_rec ../*.hpp))
+  (action
+   (with-stderr-to inc_shared_ptr_cpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o inc_shared_ptr_cpp.v --no-elaborate --templates=inc_shared_ptr_cpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
+ (alias (name srcs) (deps inc_shared_ptr.cpp))
+)
+(subdir shared_ptr
+ (rule
+  (targets test_cpp.v.stderr test_cpp.v test_cpp_templates.v)
+  (alias test_ast)
+  (deps
+   (:input test.cpp)
+   (glob_files_rec ../*.hpp))
+  (action
+   (with-stderr-to test_cpp.v.stderr (run %{bin:cpp2v-run} --config %{dep:../../cpp_environment} --host-tool %{bin:cpp2v} --container-tool cpp2v -- -v %{input} -o test_cpp.v --no-elaborate --templates=test_cpp_templates.v  -- -std=c++20 -stdlib=libstdc++ ))))
+ (alias (name srcs) (deps test.cpp))
 )
 (subdir string
  (rule
