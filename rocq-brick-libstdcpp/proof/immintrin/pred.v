@@ -11,8 +11,17 @@ Require Export skylabs.brick.libstdcpp.immintrin.model.
 
 (** * Vector types, alignment, and cast roundtrip lemmas for [<immintrin.h>] *)
 
+Abbreviation Tm128i := (Tvector Tlonglong 2 16).
 Abbreviation Tm256i := (Tvector Tlonglong 4 32).
 Abbreviation Tm256i_u := (Tvector Tlonglong 4 1).
+
+Lemma vec128_has_type_prop {σ : genv} (bs : list N) :
+  vec128_wf bs ->
+  has_type_prop (σ:=σ) (Vvec bs) Tm128i.
+Proof.
+  intros [Hlen Hbounds].
+  apply has_vector_type; [lia | rewrite Hlen; reflexivity | exact Hbounds].
+Qed.
 
 Lemma vec256_has_type_prop {σ : genv} (bs : list N) :
   vec256_wf bs ->
@@ -110,12 +119,29 @@ Section with_cpp.
 End with_cpp.
 
 #[global] Hint Resolve
+  vec256_wf_setzero
+  vec128_wf_set1
   vec256_wf_set1
+  vec256_wf_setr
   vec256_wf_cmpeq
+  vec256_wf_add
   vec256_wf_sub
+  vec128_wf_sub
   vec256_wf_cmpgt
+  vec256_wf_max_epu8
+  vec128_wf_max_epu8
+  vec256_wf_max_epi8
+  vec128_wf_shuffle
+  vec256_wf_shuffle
+  vec256_wf_blendv
+  vec256_wf_and
   vec256_wf_or
+  vec256_wf_xor
+  vec128_wf_castsi256_si128
+  vec128_wf_extracti128_si256
+  vec256_wf_set_m128i
   avx2_movemask_epi8_bound
+  vec128_has_type_prop
   vec256_has_type_prop
   to_signed_W32_has_type_prop : pure sl_opacity has_type_prop.
 #[global] Hint Resolve

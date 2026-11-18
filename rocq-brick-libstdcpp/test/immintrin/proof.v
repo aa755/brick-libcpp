@@ -312,7 +312,7 @@ Section with_cpp.
   Proof using MOD.
     verify_spec.
     go.
-    iExists q, bs.
+    rewrite <- (bi.exist_intro q), <- (bi.exist_intro bs).
     go.
     rewrite N2Z.id.
     go.
@@ -335,7 +335,7 @@ Section with_cpp.
   Proof using MOD.
     verify_spec.
     go.
-    iExists q, bs.
+    rewrite <- (bi.exist_intro q), <- (bi.exist_intro bs).
     go.
     Local Transparent control_mask_of_chunk32.
     unfold control_mask_of_chunk32.
@@ -390,7 +390,7 @@ Section with_cpp.
       match goal with
       | Hlt : (?cur < nblocks)%N |- _ =>
           replace (32 * Z.of_N cur)%Z with (Z.of_N (32 * cur)) by lia;
-          iExists q, (chunk32 (N.to_nat cur) bs)
+          rewrite <- (bi.exist_intro q), <- (bi.exist_intro (chunk32 (N.to_nat cur) bs))
       end.
       go.
       match goal with
