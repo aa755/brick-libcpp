@@ -6,6 +6,8 @@
 Set Default Goal Selector "!".
 
 Require Import skylabs.auto.cpp.specs.
+Require Import skylabs.auto.cpp.proof.
+Require Import skylabs.auto.cpp.hints.invoke.
 Require Export skylabs.brick.libstdcpp.immintrin.model.
 Require Export skylabs.brick.libstdcpp.immintrin.pred.
 Require Import skylabs.brick.libstdcpp.immintrin.inc_immintrin_cpp.
@@ -247,4 +249,15 @@ Section with_extract_builtin.
   Definition SpecFor_builtin_ia32_extract128i256 :=
     RegisterSpec builtin_ia32_extract128i256_spec.
   #[global] Existing Instance SpecFor_builtin_ia32_extract128i256.
+
+  (** Route calls to [__builtin_ia32_extract128i256] through standard
+      [wp_operand_call_invoke] (discharging via [SpecFor_builtin_ia32_extract128i256])
+      before [auto-cpp]'s generic [wp_operand_builtin_call_B | 100] hint. *)
+  Definition wp_operand_call_ia32_extract128i256_B :=
+    [BWD] (fun tu ρ ty es =>
+      @wp_operand_call_invoke _ _ Σ σ tu ρ
+        (Ecast (Cbuiltin2fun (Tptr ty))
+               (Eglobal (Nglobal (Nid "__builtin_ia32_extract128i256")) ty))
+        es).
 End with_extract_builtin.
+#[global] Hint Resolve wp_operand_call_ia32_extract128i256_B | 50 : db_skylabs_wp.

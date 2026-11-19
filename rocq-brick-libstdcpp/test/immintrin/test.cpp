@@ -50,3 +50,8 @@ void scan_control_masks(
         b = b + 1;
     }
 }
+
+__attribute__((target("avx2")))
+__m128i extract_hi_128(__m256i const v) {
+    return _mm256_extracti128_si256(v, 1);
+}

@@ -415,17 +415,31 @@ Section with_cpp.
     }
   Qed.
 
+  cpp.spec "extract_hi_128(__m256i)" as extract_hi_128_spec with (
+    \arg{v : list N} "v" (Vvec v)
+    \require vec256_wf v
+    \post[Vvec (avx2_extracti128_si256 v 1)] emp).
+
+  Theorem extract_hi_128_ok :
+    builtin_ia32_extract128i256_spec |-- verify[source] extract_hi_128_spec.
+  Proof using MOD.
+    verify_spec.
+    go.
+  Qed.
+
   Definition eq_bytes_ok_B := [LINK] eq_bytes_ok.
   Definition match_byte_mask_32_ok_B := [LINK] match_byte_mask_32_ok.
   Definition range_0x60_0x7f_bytes_ok_B := [LINK] range_0x60_0x7f_bytes_ok.
   Definition control_mask_32_ok_B := [LINK] control_mask_32_ok.
   Definition scan_control_masks_ok_B := [LINK] scan_control_masks_ok.
+  Definition extract_hi_128_ok_B := [LINK] extract_hi_128_ok.
   #[local] Hint Resolve
     eq_bytes_ok_B
     match_byte_mask_32_ok_B
     range_0x60_0x7f_bytes_ok_B
     control_mask_32_ok_B
-    scan_control_masks_ok_B : sl_opacity.
+    scan_control_masks_ok_B
+    extract_hi_128_ok_B : sl_opacity.
 
   Theorem immintrin_test_specs_ok :
     denoteModule source **
@@ -435,12 +449,14 @@ Section with_cpp.
     mm256_sub_epi8_spec **
     mm256_cmpgt_epi8_spec **
     mm256_or_si256_spec **
-    mm256_movemask_epi8_spec
+    mm256_movemask_epi8_spec **
+    builtin_ia32_extract128i256_spec
     |-- eq_bytes_spec **
         match_byte_mask_32_spec **
         range_0x60_0x7f_bytes_spec **
         control_mask_32_spec **
-        scan_control_masks_spec.
+        scan_control_masks_spec **
+        extract_hi_128_spec.
   Proof using MOD.
     go.
   Qed.
